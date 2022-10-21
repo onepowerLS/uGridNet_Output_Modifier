@@ -1,10 +1,22 @@
+from distutils.log import error
 import glob
 import os
 import string
+import sys
+from warnings import catch_warnings
 
 import pandas as pd
 from openpyxl import load_workbook
 
+"""
+Author: Motlatsi
+Created: 14/Oct/22
+
+The script's main intention/function is to update/format the subnet works from the uGridNet output and the corresponding
+branches.
+    
+The Other function of the script is to return the Total number of poles and their types classified as LV and MV
+"""
 
 class Modify_uGridNet_excel:
     
@@ -21,25 +33,47 @@ class Modify_uGridNet_excel:
         for Pole in PoleClass_df["Type"]:
             if "MV" in Pole:
                 MV_Pole +=1
-        count_pole_info = f"LV pole:{self.Pole_Length-MV_Pole}  MV pole:{MV_Pole}"
+        count_pole_info = f"Pole infomation: LV pole:{self.Pole_Length-MV_Pole}  MV pole:{MV_Pole}"
         return (count_pole_info)
     
-    
-    def File_Directores(self):
+    def File_Directies():
+        
         path=os.getcwd()
         files_in_cdir = os.listdir(path)
-
-        for file in files_in_cdir:  
-            if "Archive" not in file and "SC" not in file and ".py" not in file: 
-                SOURCE_DIR = file
+        consession_files_path = []
+        Village_name_list = []
+        consession_excels = []
+    
+        for vill_name in files_in_cdir:  
+            if "Archive" not in vill_name and "SC" not in vill_name and ".py" not in vill_name: 
+                SOURCE_DIR = vill_name
                 files_in_odir = glob.glob(SOURCE_DIR )
-                for inner_file in files_in_odir: #inner_file is the village_name folder
-                    for Infile in glob.glob(inner_file + "/" + inner_file ): #concatinatinating inner_file twice takes us to the destination dir
-                        destination_dir = os.listdir(Infile)
-                        for file in destination_dir:
-                            if "Archive" not in file and "SC" not in file:
-                                print("\n",os.path.abspath(file)) #path of the current file
-                    
+                if ('Arc') not in files_in_odir and ('Ach') not in files_in_odir and ('GIS') not in files_in_odir and ("xlsx") not in files_in_odir and ("py") not in files_in_odir:
+                    Village_name_list.append(files_in_cdir)
+                    for inner_file in files_in_odir: #inner_file is the village_name folder
+                        for Infile in glob.glob(inner_file + "/" + inner_file ): #concatinatinating inner_file twice takes us to the destination dir
+                            destination_dir = os.listdir(Infile)
+                            for file in destination_dir:
+                               if ('Arc') not in file and ('Ach') not in file and ('GIS') not in file and ('uGridNet') in file and file.endswith('xlsx'):
+                                    consession_excels.append(file)
+                                    consession_files_path.append(f"{os.path.abspath(Infile)}\\{file}")
+        
+        Modify_uGridNet_excel.instantiate(consession_files_path, consession_excels)
+        
+    def instantiate(consession_files_path,consession_excels):
+        
+        for file in (consession_files_path):
+            excel_file = file
+            try:
+                if (os.path.exists(excel_file)):
+                    network_length_df = pd.read_excel(excel_file, index_col = 0, sheet_name="NetworkLength")
+                    DropLines_df = pd.read_excel(excel_file, index_col = 0, sheet_name="DropLines") 
+                    #print(network_length_df)
+                    Modify_uGridNet_excel(network_length_df, DropLines_df,excel_file)                             
+                else:
+                    print(f"No such file path as {excel_file}")
+            except:
+                print ("Failed: ", error)                               
            
     def Update_NetworkLength(self,New_Branch,New_subnetwork, idx, Type):
         self.wb = load_workbook(self.excel_file)
@@ -47,31 +81,27 @@ class Modify_uGridNet_excel:
         self.wb.save(self.excel_file)
         
         MV_pole_count = 0
-        
-
+    
         if "MV" in Type:
             MV_pole_count+=1
             self.ws.cell(row=idx+2, column = 9, value = New_subnetwork)
             self.wb.save(self.excel_file)      
-        else:
-            
+        else:  
             self.ws.cell(row=idx+2, column = 9, value = New_subnetwork)
             self.ws.cell(row=idx+2, column = 10, value = New_Branch)
             self.wb.save(self.excel_file)
-        
-    
+   
     def Update_DropLines(self,New_subnetwork, idx):
 
-        self.wb = load_workbook(excel_file)
+        self.wb = load_workbook(self.excel_file)
         self.ws=self.wb["DropLines"]
         self.ws.cell(row=idx+2, column = 7, value = New_subnetwork)
         self.wb.save(self.excel_file)
              
     def Modify_Subnetwork(self):
         
-        print("\n\nUpdating NetworkLength.....")
+        print(f"\n\nNow on {self.excel_file}\nUpdating NetworkLength.....")
         Branch_Letters = (string.ascii_uppercase)
-    
         for idx in range(len(self.NetworkLength_df)):
             Type = self.NetworkLength_df.iat[idx,4]
             Pole_ID_From = self.NetworkLength_df.iat[idx,5]
@@ -89,11 +119,11 @@ class Modify_uGridNet_excel:
                         if "M" in Pole_ID_From and Pole_ID_From[-1] in Branch_Letters:    
                              
                             New_Branch = f"{Pole_ID_To[i+2]}"                              
-                            Modify_uGridNet_excel.Update_NetworkLength(self,New_Branch,New_subnetwork, idx, Type)
-                                                        
+                            Modify_uGridNet_excel.Update_NetworkLength(self,New_Branch,New_subnetwork, idx, Type)                                
                         else:
                             New_subnetwork = f"{SubNetwork[0:2]}{Pole_ID_From[i+1]}" 
                             New_Branch = f"{Pole_ID_From[i+2]}"
+                            
                             Modify_uGridNet_excel.Update_NetworkLength(self,New_Branch,New_subnetwork, idx, Type) 
                             
                         count = 0 
@@ -114,23 +144,12 @@ class Modify_uGridNet_excel:
             if len(self.DropLines_df) == idx+1:
                 self.wb.save(self.excel_file)
                 Modify_uGridNet_excel.Update_NetworkLength
-                print("done!!\n")
                 
-        print(Modify_uGridNet_excel.Count_Poles(self), f" Total Poles {self.Pole_Length}\n" )
+        print(Modify_uGridNet_excel.Count_Poles(self), f" Total Poles {self.Pole_Length}\nDone!!!")
                 
 
 if __name__ == "__main__":
     
-    path=os.getcwd()
-    files_in_cdir = os.listdir(path)
+    Modify_uGridNet_excel.File_Directies()
     
-    
-    for file in files_in_cdir:
-        if file.endswith('.xlsx'):
-            excel_file = file 
-            
-            network_length_df = pd.read_excel(excel_file, index_col = 0, sheet_name="NetworkLength")
-            DropLines_df = pd.read_excel(excel_file, index_col = 0, sheet_name="DropLines")    
-            Modify_uGridNet_excel(network_length_df, DropLines_df,excel_file)
-            
 
